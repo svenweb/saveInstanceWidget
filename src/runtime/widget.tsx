@@ -6,6 +6,7 @@ import Extent from 'esri/geometry/Extent';
 import Graphic from "@arcgis/core/Graphic.js";
 import { set } from 'seamless-immutable';
 import { update } from 'lodash-es';
+import { validate } from 'uuid';
 
 /**
  * 
@@ -19,6 +20,9 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
     const [graphicsLayersGraphics, setGraphicsLayerGraphics] = useState<any>([]);
     const [currentInstanceName, setCurrentInstanceName] = useState("");
     const storageKey = "saveInstanceWidgetSessions";
+
+    const [fileContent, setFileContent] = useState('');
+
 
 
 
@@ -295,41 +299,29 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
                   // set visible
                   //if (layer.isVisibile) {
                   layer.visible = settings[layerSettings].isVisible;
-                  //console.log('SaveInstance :: loadSession :: set visibility = ', settings[layerSettings].isVisible, ' for layer : id=', layer.id);
-                  //}
 
-                  // if (layerSettings.visibleLayers && layer.setVisibleLayers) {
-                  //     var visibleLayers = JSON.parse(JSON.stringify(layerSettings.visibleLayers)) as any[];
-                  //     if (!layerSettings.visibleLayers.length) {
-                  //         // for no visible layers use array of -1
-                  //         // drackleyad :: note that in order to properly interpret a layer as truly 'off', it requires an array consisting only of three '-1' values
-                  //         visibleLayers = [-1, -1, -1];
-                  //     } else {
-                  //         // has some visible layers
-                  //         removeItem = [];
-                  //         visibleLayers.map((index, visibleLayer) => {
-                  //             if (visibleLayer === -1) {
-                  //                 removeItem.push(index);
-                  //             }
-                  //         });
-
-                  //         for (i = removeItem.length; i-- > 0;) {
-                  //             visibleLayers.splice(i, 1);
-                  //         }
-                  //     }
-
-                  //     layer.setVisibleLayers(visibleLayers);
                   }
 
-                  //console.log('SaveInstance :: loadSession :: setLayersOnMap completed for layer = ', layer.id);
+
               }
 
 
               //Need to check that graphics have not already been added to the maps
-              function setGraphicsOnMap(graphics){
-                graphics.forEach(graphic => {
-                  let newGraphic = Graphic.fromJSON(graphic);
-                  jimuMapView.view.graphics.add(newGraphic);
+              function setGraphicsOnMap(graphics, instanceName){
+                //find any graphics with the same instance name
+                let existingGraphics = jimuMapView.view.graphics.filter(function(graphic){
+                  return graphic.attributes.instance === instanceName 
+                })
+                
+                //remove all graphics with same instance name
+                if(existingGraphics.length > 0){
+                  jimuMapView.view.graphics.removeMany(existingGraphics)
+                }
+                
+                //add all the graphics
+                graphics.forEach(function(graphic){
+                  let graphicFromJSON = Graphic.fromJSON(graphic);
+                  jimuMapView.view.graphics.add(graphicFromJSON);
                 })
 
               }
@@ -348,37 +340,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
                 
               // }
               let extentToLoad;
-              //var onMapChanged,
-              //    extentToLoad;
-
-              // if (sessionToLoad.webmapId && sessionToLoad.webmapId !== this.map.itemId) {
-              //     console.log('SaveSession :: loadSession :: changing webmap = ', sessionToLoad.webmapId);
-
-
-              //     onMapChanged = topic.subscribe("mapChanged", lang.hitch(this, function (newMap) {
-
-              //         console.log('SaveSession :: loadSession :: map changed from  ', this.map.itemId, ' to ', newMap.itemId);
-
-              //         // update map reference here
-              //         // since this.map still refers to old map?
-              //         // ConfigManager has not recreated widget with new map yet
-              //         this.map = newMap;
-
-              //         // do not listen any more
-              //         onMapChanged.remove();
-
-              //         // load the rest of the session
-              //         this.loadSession(sessionToLoad);
-              //     }));
-
-
-              //     ConfigManager.getInstance()._onMapChanged({
-              //         "itemId": sessionToLoad.webmapId
-              //     });
-
-              //     // do not continue until webmap is changed
-              //     return;
-              // }
 
               //  zoom the map
               if (sessionToLoad.extent) {
@@ -390,16 +351,14 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
               // load the saved graphics
               //use Collection.find() method to try to find out if the graphic is already on the map
 
-             setGraphicsOnMap(sessionToLoad.graphics);
+             setGraphicsOnMap(sessionToLoad.graphics, sessionToLoad.name);
+             console.log(jimuMapView.view.graphics)
 
 
               // toggle layers
               if (sessionToLoad.layers) {
                   setLayersOnMap(sessionToLoad.layers);
               }
-
-              // fire custom event
-              //topic.publish("SaveSession/SessionLoaded", sessionToLoad);
 
               console.log('SaveSession :: loadSession :: session  = ', sessionToLoad);
           }
@@ -465,18 +424,133 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           // Too bad, no localStorage for us
         }
     }
-        
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+
+    function editInstanceName(instanceName){
+      //open a prompt window asking what they want to change {instanceName} to, and also have a cancel button
+      const newName = window.prompt("Enter a new name for the instance " + instanceName + ":");
+      if(newName){
+        const savedInstancesCopy = [...savedInstances];
+        savedInstancesCopy.forEach(instance => {
+          if(instance.name === instanceName){
+            instance.name = newName;
+            instance.graphics.forEach(graphic => {
+                graphic.attributes.instance = newName
+            })
+          }
+        })
+        setSavedInstances(savedInstancesCopy);
+        storeInstances(savedInstancesCopy);
+      }
+    }
+
+    function validateUploadedString(uploadedString:string){
+      //validate the uploaded file
       try {
-        let decodedJSON = atob(e.target.value);
-        console.log(decodedJSON)
+        let decodedJSON = atob(uploadedString);
         const parsed = JSON.parse(decodedJSON);
         console.log("PARSED", parsed)
-        setMapSettingsString(parsed);
+        //loop through the parsed object
+        //check for duplicate instances
+        let nonDuplicateInstances = []; 
+        parsed.forEach(instance => {
+          console.log("INSTANCE", instance)
+          const duplicateInstances = savedInstances.filter(s => s.name === instance.name);
+          if(duplicateInstances.length > 0){
+            console.log("DUPLICATE INSTANCE", instance)
+            const response = window.confirm(`The instance "${instance.name}" already exists, do you want to replace it?`);
+            if(!response){
+              return;
+            }
+          }
+          nonDuplicateInstances.push(instance);
+        });
+
+        const newSavedInstances = [...savedInstances, ...nonDuplicateInstances];  
+        setSavedInstances(newSavedInstances);
+        storeInstances(newSavedInstances);
+        
       } catch (err) {
         console.error("Invalid JSON input");
       }
+    }
+      
+
+    const handleFileChange = (event) => {
+      const file = event.target.files?.[0];
+      if (file && file.type === "text/plain") {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target?.result;
+          if (typeof text === 'string') {
+            console.log(text)
+            validateUploadedString(text)
+            setFileContent(text);
+          }
+        };
+        reader.readAsText(file);
+      } else {
+        alert("Please upload a valid .txt file.");
+      }
     };
+
+/**
+ * Initiates a download of the saved instances as a text file.
+ * The file is named using the provided instance name and the current date and time.
+ * @param {string} instanceName - The name to prefix the downloaded file with.
+ */
+
+    const handleDownload = (instanceName, isAllInstances) => {
+
+      let savedInstancesToDownload;
+      if(isAllInstances){
+        savedInstancesToDownload = savedInstances;
+      } else {
+        savedInstancesToDownload = [savedInstances.find(instance => instance.name === instanceName)];
+      }
+      const savedInstancesJSON = JSON.stringify(savedInstancesToDownload);
+      const savedInstancesEncoded = btoa(savedInstancesJSON);
+      const date = new Date();
+      const formattedDate = `${date.toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })}-${date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+      const filename = `${instanceName}-${formattedDate}.txt`;
+  
+      const blob = new Blob([savedInstancesEncoded], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+  
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+  
+      URL.revokeObjectURL(url); // Clean up after download
+    };
+
+
+
+
+    /**
+     * Removes all graphics from the map that have the specified instance name.
+     * @param {string} instanceName - The name of the instance whose graphics are to be removed.
+     */
+    function removeInstanceGraphicsFromMap(instanceName){
+      let existingGraphics = jimuMapView.view.graphics.filter(function(graphic){
+        return graphic.attributes.instance === instanceName
+      })
+      jimuMapView.view.graphics.removeMany(existingGraphics)
+    }
+
+/**
+ * Removes an instance and its associated graphics from the map.
+ * Updates the saved instances list by filtering out the specified instance
+ * and stores the updated list in local storage.
+ * 
+ * @param {string} instanceName - The name of the instance to be removed.
+ */
+    function removeInstance(instanceName){
+      removeInstanceGraphicsFromMap(instanceName)
+      const updatedSavedInstances = savedInstances.filter(instance => instance.name !== instanceName);
+      setSavedInstances(updatedSavedInstances)
+      storeInstances(updatedSavedInstances)
+    }
 
 
     function renderSavedInstances(){
@@ -486,18 +560,18 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
         //for each instance, check if the webmapId matches the current map
         //Then display a <tr> displaying the name of each instance
         return (
-          <div style={{display: 'flex', flexDirection: 'column'}}>
+          <div style={{display: 'flex', flexDirection: 'column', marginRight: '15px'}}>
             <table style={{borderCollapse: 'collapse', width: '100%'}}>
               <tbody>
                 {savedInstances.map((instance, index) => (
                   <tr key={index} style={{background: index % 2 === 0 ? '#f2f2f2' : 'white'}}>
-                    <td style={{padding: '8px', border: '1px solid #ddd'}}>{instance.name}</td>
+                    <td style={{padding: '8px', border: '1px solid #ddd', fontSize: '13px'}}>{instance.name}</td>
                     <td style={{padding: '8px', border: '1px solid #ddd'}}>
                       <button
                         style={{
                           background: '#4CAF50',
                           color: 'white',
-                          padding: '8px 16px',
+                          padding: '2px 4px',
                           border: 'none',
                           borderRadius: '5px',
                           cursor: 'pointer'
@@ -507,9 +581,63 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
                           console.log(instance)
                           loadSession(instance)}}
                       >
-                        Load
+                        <calcite-icon icon="overwrite-features" />
                       </button>
                     </td>
+                    <td style={{padding: '8px', border: '1px solid #ddd'}}>
+                      <button
+                      style={{
+                        background: 'none',
+                        color: 'black',
+                        padding: '2px 4px',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => editInstanceName(instance.name)}
+                      ><calcite-icon icon="edit-attributes" /></button>
+                    </td>
+                    <td style={{padding: '8px', border: '1px solid #ddd'}}>
+                      <button
+                      style={{
+                        background: 'none',
+                        color: 'black',
+                        padding: '2px 4px',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => handleDownload(instance.name, false)}
+                      ><calcite-icon icon="download" /></button>
+                    </td>
+                    <td style={{padding: '8px', border: '1px solid #ddd'}}>
+                      <button
+                      style={{
+                        background: '#ADD8E6',
+                        color: 'white',
+                        padding: '2px 4px',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => removeInstanceGraphicsFromMap(instance.name)}
+                      ><calcite-icon icon="x-circle" /></button>
+                    </td>
+                    <td style={{padding: '8px', border: '1px solid #ddd'}}>
+                      <button
+                      style={{
+                        background: 'red',
+                        color: 'white',
+                        padding: '2px 4px',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => removeInstance(instance.name)}
+                      ><calcite-icon icon="trash" /></button>
+                    </td>
+
+
                   </tr>
                 ))}
               </tbody>
@@ -537,28 +665,31 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
         <input type="text" onChange={(e) => setCurrentInstanceName(e.target.value)}/>
       </div>
             
-      <button onClick={() => {getSettingsForCurrentMap()}}>Save Instance</button>
+      <button style={{marginBottom: '15px'}} onClick={() => {getSettingsForCurrentMap()}}>Save Instance</button>
       
       <hr />           
-      <br />
-      <p> <strong>Saved Instances:</strong></p>
-      <div style={{display: 'flex', alignItems: 'center', marginBottom: '10px', marginTop: '3px'}}>
-        <input
-          type="text"
-          id="mapSettingsStringInput"
-          onChange={handleInputChange}
-          placeholder='Paste JSON here'
-        />      
-        <button onClick={() => {loadSession(mapSettingsString)}}>Load Map Input Settings</button>
 
-
-        <br />          
-        
-      </div>
+      <p style={{marginTop: '20px'}}> <strong>Saved Instances:</strong></p>
 
       <div>
          {renderSavedInstances()}
       </div> 
+
+      <div style={{display: 'flex', alignItems: 'center', marginTop: '15px'}}>
+        <button
+          style={{ marginRight: '5px' }}
+          onClick={() => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.txt';
+            input.onchange = handleFileChange;
+            input.click();
+          }}
+        >
+          Upload Instances
+        </button>
+        <button style={{marginLeft: '5px'}} onClick={() => {handleDownload('allInstances', true)}}>Download Instances</button>
+      </div>
     </div>
   )
 }
