@@ -4,9 +4,9 @@ import { JimuMapView, JimuMapViewComponent } from 'jimu-arcgis'
 import { useEffect, useState } from 'react';
 import Extent from 'esri/geometry/Extent';
 import Graphic from "@arcgis/core/Graphic.js";
-import { set } from 'seamless-immutable';
-import { update } from 'lodash-es';
-import { validate } from 'uuid';
+import Basemap from "@arcgis/core/Basemap.js";
+
+
 
 /**
  * 
@@ -20,9 +20,14 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
     const [graphicsLayersGraphics, setGraphicsLayerGraphics] = useState<any>([]);
     const [currentInstanceName, setCurrentInstanceName] = useState("");
     const storageKey = "saveInstanceWidgetSessions";
+    
+    const [showFunctionLegend, setShowFunctionLegend] = useState(false);
 
     const [fileContent, setFileContent] = useState('');
 
+    // Esri color ramps - Blue 19
+    // #00497cff,#0062a8ff,#007cd3ff,#00b7ffff
+    const blue19Colors = ["#00497cff", "#0062a8ff", "#007cd3ff", "#00b7ffff"];
 
 
 
@@ -61,14 +66,30 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
        */
       const getSettingsForCurrentMap = async () => {
         if (!jimuMapView) return null;
+
         console.log(jimuMapView)
+
+        if(currentInstanceName === ""){
+          alert("Please enter an instance name")
+          return null
+        }
+
+        //check if there is an instance with the same name as currentInstanceName
+        const duplicateInstance = savedInstances.filter(s => s.name === currentInstanceName);
+        console.log("DUPLICATE INSTANCE", duplicateInstance)
+        if(duplicateInstance.length > 0){
+          alert(`The instance "${currentInstanceName}" already exists, please choose another name`)
+          return null
+        }
+
 
         const settings = {
           name: currentInstanceName,
           webmapId: jimuMapView.view.map.portalItem.id,
           extent: jimuMapView.view.extent.toJSON(),
           layers: [],
-          graphics: jimuMapView.view.graphics.toArray()
+          graphics: jimuMapView.view.graphics.toArray(),
+          basemap: jimuMapView.view.map.basemap.toJSON()
         };
 
         let graphicsLayersGraphics;
@@ -77,7 +98,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           const layerSettings = await getLayerSettingsForCurrentMap();
           settings.layers = layerSettings[0];
           graphicsLayersGraphics = layerSettings[1];
-          //console.log('SaveInstance :: getSettingsForCurrentMap :: layerSettings completed  = ', layerSettings);
         } catch (err) {
           console.error("An error occurred while getting the layers from the current map.", err);
         }
@@ -341,6 +361,12 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
               // }
               let extentToLoad;
 
+              //set basemap
+              if (sessionToLoad.basemap) {
+                let newBaseMap = Basemap.fromJSON(sessionToLoad.basemap);
+                jimuMapView.view.map.basemap = newBaseMap;
+              }
+
               //  zoom the map
               if (sessionToLoad.extent) {
                   console.log(sessionToLoad.extent)
@@ -429,6 +455,13 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       //open a prompt window asking what they want to change {instanceName} to, and also have a cancel button
       const newName = window.prompt("Enter a new name for the instance " + instanceName + ":");
       if(newName){
+        //check that the new name is not already in use
+        const duplicateInstances = savedInstances.filter(s => s.name === newName);
+        if(duplicateInstances.length > 0){
+          alert(`The instance "${newName}" already exists, please choose another name`)
+          return
+        }
+
         const savedInstancesCopy = [...savedInstances];
         savedInstancesCopy.forEach(instance => {
           if(instance.name === instanceName){
@@ -501,6 +534,11 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
     const handleDownload = (instanceName, isAllInstances) => {
 
+      if(savedInstances.length === 0){
+        alert("There are no saved instances to download.")
+        return
+      }
+
       let savedInstancesToDownload;
       if(isAllInstances){
         savedInstancesToDownload = savedInstances;
@@ -552,6 +590,8 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       storeInstances(updatedSavedInstances)
     }
 
+    
+
 
     function renderSavedInstances(){
       console.log("RENDERING SAVED INSTANCES")
@@ -560,81 +600,84 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
         //for each instance, check if the webmapId matches the current map
         //Then display a <tr> displaying the name of each instance
         return (
-          <div style={{display: 'flex', flexDirection: 'column', marginRight: '15px'}}>
-            <table style={{borderCollapse: 'collapse', width: '100%'}}>
+          <div style={{display: 'flex', flexDirection: 'column', width: '90%', marginRight:'4%'}}>
+            <table style={{borderCollapse: 'collapse'}}>
               <tbody>
+                <tr>
+                  <td style={{ textAlign: 'center', backgroundColor: blue19Colors[1], color: 'white',  fontSize: '13px' }}>Name</td>
+                  <td colSpan={5} style={{ textAlign: 'center', backgroundColor: blue19Colors[1], color: 'white', fontSize: '13px' }}>Functions <button style={{marginLeft:"3px",color:"white",backgroundColor: 'transparent', cursor: 'pointer', borderRadius: '50%', border: '1px solid white'}} onClick={() => setShowFunctionLegend(!showFunctionLegend)}>?</button></td>
+                </tr>
                 {savedInstances.map((instance, index) => (
                   <tr key={index} style={{background: index % 2 === 0 ? '#f2f2f2' : 'white'}}>
-                    <td style={{padding: '8px', border: '1px solid #ddd', fontSize: '13px'}}>{instance.name}</td>
-                    <td style={{padding: '8px', border: '1px solid #ddd'}}>
+                    <td style={{padding: '0px', border: '1px solid #ddd', fontSize: '13px',  textAlign: 'center', color:blue19Colors[0]}}>{instance.name}</td>
+                    <td style={{padding: '0px', textAlign: 'center', border: '1px solid #ddd'}}>
                       <button
                         style={{
-                          background: '#4CAF50',
-                          color: 'white',
-                          padding: '2px 4px',
+                          color: 'black',
                           border: 'none',
-                          borderRadius: '5px',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          display: 'inline-block',
+                          backgroundColor: 'transparent'
                         }}
                         onClick={() => {
                           console.log(savedInstances)
                           console.log(instance)
                           loadSession(instance)}}
+                        title="Load instance to map"
+                        
                       >
-                        <calcite-icon icon="overwrite-features" />
+                        <calcite-icon icon="overwrite-features" scale="s"/>
                       </button>
                     </td>
-                    <td style={{padding: '8px', border: '1px solid #ddd'}}>
+                    <td style={{ border: '1px solid #ddd',textAlign: 'center'}}>
                       <button
                       style={{
-                        background: 'none',
                         color: 'black',
-                        padding: '2px 4px',
+                        cursor: 'pointer',
                         border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer'
+                        backgroundColor: 'transparent'
                       }}
                       onClick={() => editInstanceName(instance.name)}
-                      ><calcite-icon icon="edit-attributes" /></button>
+                      title="Edit instance name"
+                      ><calcite-icon icon="edit-attributes" scale="s"/></button>
                     </td>
-                    <td style={{padding: '8px', border: '1px solid #ddd'}}>
+                    <td style={{border: '1px solid #ddd',  textAlign: 'center'}}>
                       <button
                       style={{
-                        background: 'none',
                         color: 'black',
-                        padding: '2px 4px',
                         border: 'none',
                         borderRadius: '5px',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        backgroundColor: 'transparent'
                       }}
                       onClick={() => handleDownload(instance.name, false)}
-                      ><calcite-icon icon="download" /></button>
+                      title="Download instance"
+                      ><calcite-icon icon="download" scale="s"/></button>
                     </td>
-                    <td style={{padding: '8px', border: '1px solid #ddd'}}>
+                    <td style={{ border: '1px solid #ddd',  textAlign: 'center'}}>
                       <button
                       style={{
-                        background: '#ADD8E6',
-                        color: 'white',
-                        padding: '2px 4px',
+                        color: 'black',
                         border: 'none',
                         borderRadius: '5px',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        backgroundColor: 'transparent'
                       }}
                       onClick={() => removeInstanceGraphicsFromMap(instance.name)}
-                      ><calcite-icon icon="x-circle" /></button>
+                      title="Clear instance graphics from map"
+                      ><calcite-icon icon="x-circle" scale="s"/></button>
                     </td>
-                    <td style={{padding: '8px', border: '1px solid #ddd'}}>
+                    <td style={{ border: '1px solid #ddd',  textAlign: 'center'}}>
                       <button
                       style={{
-                        background: 'red',
-                        color: 'white',
-                        padding: '2px 4px',
+                        color: 'black',
+                        cursor: 'pointer',
                         border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer'
+                        backgroundColor: 'transparent'
                       }}
                       onClick={() => removeInstance(instance.name)}
-                      ><calcite-icon icon="trash" /></button>
+                      title="Delete instance"
+                      ><calcite-icon icon="trash" scale="s"/></button>
                     </td>
 
 
@@ -650,7 +693,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
 
   return (
-    <div className="widget-demo jimu-widget m-2">
+    <div className="widget-demo jimu-widget m-2 overflow-auto" style={{overflowY: 'scroll', scrollbarWidth: 'none'}}>
         {props.hasOwnProperty("useMapWidgetIds") &&
                     props.useMapWidgetIds &&
                     props.useMapWidgetIds.length == 1 && (
@@ -659,25 +702,60 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
                         onActiveViewChange={activeViewChangeHandler}
                       />
                     )}
-      <p style={{}}> <strong>Save your current map instance</strong> </p>
-      <div style={{display: 'flex', alignItems: 'center', marginBottom: '3px'}}>
-        <label htmlFor="" style={{marginRight: '5px'}} >Instance Name:</label>
-        <input type="text" onChange={(e) => setCurrentInstanceName(e.target.value)}/>
+      <p style={{fontSize: '14px', color:blue19Colors[0]}}> <strong>Save your current map instance:</strong> </p>
+      <div style={{display: 'flex', alignItems: 'center', marginBottom: '5px'}}>
+        <label htmlFor="" style={{marginRight: '5px', fontSize: '13px', lineHeight: '1.5', color: blue19Colors[0]}} >Instance Name:</label>
+        <input type="text" onChange={(e) => setCurrentInstanceName(e.target.value)} style={{alignSelf: 'center', border: '1px solid', padding: '2px', borderColor: blue19Colors[3]}}/>
       </div>
             
-      <button style={{marginBottom: '15px'}} onClick={() => {getSettingsForCurrentMap()}}>Save Instance</button>
+      <button style={{marginBottom: '15px', marginTop: '5px', background:(currentInstanceName.length > 0) ? blue19Colors[1]:'grey', color: 'white', padding: '4px 8px', border: 'none',cursor: 'pointer'}}
+      onClick={() => {getSettingsForCurrentMap()}}><strong>Save Instance</strong></button>
       
-      <hr />           
+      <hr style={{borderColor: blue19Colors[3], marginRight: '15px'}}/>           
 
-      <p style={{marginTop: '20px'}}> <strong>Saved Instances:</strong></p>
+      <p style={{marginTop: '20px', fontSize: '14px', color:blue19Colors[0]}}> <strong>Saved Instances:</strong></p>
+      
+      <div style={{display: showFunctionLegend ? 'flex' : 'none', justifyContent: 'center', alignItems: 'center', width: '100%', marginBottom: '15px'}}>
+        <table style={{ backgroundColor: 'lightgrey', padding:"15px"}}>
+        <tr>
+            <td style={{ textAlign: 'center', backgroundColor: blue19Colors[2], color: 'white',  fontSize: '13px' }}>Symbol</td>
+            <td colSpan={5} style={{ textAlign: 'center', backgroundColor: blue19Colors[2], color: 'white', fontSize: '13px' }}>Function Description</td>
+            <td style={{textAlign: 'right', paddingRight: '5px', backgroundColor: 'red'}}>
+              <button style={{backgroundColor:'transparent',color: 'white', padding: '2px 5px', border: 'none', cursor: 'pointer'}}
+              title="Close"
+              onClick={() => setShowFunctionLegend(false)}
+              >X</button></td>
+          </tr>
+          <tr>
+            <td style={{textAlign: 'center'}}><calcite-icon icon="overwrite-features" scale="l"/></td>
+            <td> Load instance to map</td>
+          </tr>
+          <tr >
+            <td style={{textAlign: 'center'}}><calcite-icon icon="edit-attributes" scale="l"/></td>
+            <td> Edit instance name</td>
+          </tr>
+          <tr style={{padding:"5px"}}>
+            <td style={{textAlign: 'center'}}><calcite-icon icon="download" scale="l"/></td>
+            <td> Download instance</td>
+          </tr>
+          <tr style={{padding:"5px"}}>
+            <td style={{textAlign: 'center'}}><calcite-icon icon="x-circle" scale="l"/></td>
+            <td> Clear instance graphics from map</td>
+          </tr>
+          <tr style={{padding:"5px"}}>
+            <td style={{textAlign: 'center'}}> <calcite-icon icon="trash" scale="l"/></td>
+            <td> Delete instance</td>
+          </tr>
+        </table>
+      </div>
 
-      <div>
+      <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%'}}>
          {renderSavedInstances()}
       </div> 
 
-      <div style={{display: 'flex', alignItems: 'center', marginTop: '15px'}}>
+      <div style={{display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '10%', marginBottom: '15px', width: '100%'}}>
         <button
-          style={{ marginRight: '5px' }}
+          style={{ marginRight: '10%', background:blue19Colors[1], color: 'white', padding: '4px 8px', border: 'none',cursor: 'pointer'}}
           onClick={() => {
             const input = document.createElement('input');
             input.type = 'file';
@@ -686,9 +764,11 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
             input.click();
           }}
         >
-          Upload Instances
+          <strong>Upload Instances</strong>
         </button>
-        <button style={{marginLeft: '5px'}} onClick={() => {handleDownload('allInstances', true)}}>Download Instances</button>
+        <button 
+        style={{marginLeft: '10%', marginRight:"5%",background:(savedInstances.length > 0) ? blue19Colors[1]:'grey', color: 'white', padding: '4px 8px', border: 'none',cursor: 'pointer'}}
+        onClick={() => {handleDownload('allInstances', true)}}><strong>Download Instances</strong></button>
       </div>
     </div>
   )
