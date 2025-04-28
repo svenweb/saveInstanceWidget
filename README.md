@@ -7,19 +7,43 @@ Visit the [JensenGIS](https://jensengis.com) website to download the latest comp
 ## Setup
 After downloading the compiled Save Instance Widget follow the [instructions](https://doc.arcgis.com/en/experience-builder/11.0/configure-widgets/add-custom-widgets.htm) from ESRI.
 
+Once you have the widget registered and in your /widgets folder. You can find the widget in the custom widgets section at the bottom of the Insert Widget tab in Experience Builder.
+
+Then drag the Save Instance widget to your widget toolbar, and then configure the settings of the widget by Selecting a map for the widget to interact with.
+
+That's it.
+
 ## Usage
 
 ### Saving an Instance
+Input a name for the instance and click the **Save Instance** button
+
+### Loading Instances
+After naming and saving an instance, click the **Load Instance** button to load the instance to the map.
 
 ### Edit Instance Name
+Click the **Edit Instance Name** button and enter the new name for the instance in the prompt.
 
 ### Download Instance
+Click the **Download Instance** button and a .txt file will be downloaded with that specific instance.
+image
+Or download all instances by clicking the **Download Instances** button in the bottom left.
 
 ### Clear Instance Graphics
+Click the **Clear Instance Graphics** button, if there are any graphics associated with that instance name on the map they will be removed from the jimuMapView.map.view.graphics object.
 
 ### Delete Instance
+Click the **Delete Instance** button and the instance will be removed.
 
-### Uploading Instances
+
+
+
+## Sharing Instances
+Once you have downloaded an instance or instances, you can simply send the .txt file to whom you would to share the instances to. They can use the **Upload Instances** button in the bottom left to upload the .txt file.
+
+In the future I would like to implement cloud storage of instances, if there is enough support.
+
+
 
 
 
