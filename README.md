@@ -17,24 +17,28 @@ That's it.
 
 ### Saving an Instance
 Input a name for the instance and click the **Save Instance** button
+![Name and save an Instance](/your-extensions/widgets/saveInstance/images/instanceName.png)
 
 ### Loading Instances
 After naming and saving an instance, click the **Load Instance** button to load the instance to the map.
+![load instance to map](/your-extensions/widgets/saveInstance/images/instanceLoad.png)
 
 ### Edit Instance Name
 Click the **Edit Instance Name** button and enter the new name for the instance in the prompt.
+![Edit instance name](/your-extensions/widgets/saveInstance/images/instanceRename.png)
 
 ### Download Instance
 Click the **Download Instance** button and a .txt file will be downloaded with that specific instance.
-image
+![load instance to map](/your-extensions/widgets/saveInstance/images/instanceDownload.png)
 Or download all instances by clicking the **Download Instances** button in the bottom left.
 
 ### Clear Instance Graphics
 Click the **Clear Instance Graphics** button, if there are any graphics associated with that instance name on the map they will be removed from the jimuMapView.map.view.graphics object.
+![load instance to map](/your-extensions/widgets/saveInstance/images/instanceClearGraphics.png)
 
 ### Delete Instance
 Click the **Delete Instance** button and the instance will be removed.
-
+![load instance to map](/your-extensions/widgets/saveInstance/images/instanceDelete.png)
 
 
 
