@@ -1,5 +1,5 @@
-# Save Instance Widget
-Inspired by the Save Session Widget for WebAppBuilder, the Save Instance Widget allows ExB users to save and share the extent, layer settings, basemap, graphics and more from their web map instance. Developed by a computer science and GIS university student based out of Vancouver, British Columbia.
+# Save Instance Widget for Experience Builder
+Inspired by the Save Session Widget for WebAppBuilder, the Save Instance Widget allows ExB users to save and share the extent, layer settings, basemap, graphics and more from their web map instance.
 
 ## Installation
 Visit the [JensenGIS](https://jensengis.com) website to download the latest compiled Save Instance Widget.
@@ -21,6 +21,9 @@ After downloading the compiled Save Instance Widget follow the [instructions](ht
 
 ### Uploading Instances
 
+
+
 ## Contributing
 
 #### Any requests for new features please submit an issue or an comment on the Esri Community
+
