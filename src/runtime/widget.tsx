@@ -7,23 +7,13 @@ import Graphic from "@arcgis/core/Graphic.js";
 import Basemap from "@arcgis/core/Basemap.js";
 
 
-
-/**
- * 
- * To Do:
- * - Set map from string
- */
 const Widget = (props: AllWidgetProps<IMConfig>) => {
 
     const [jimuMapView, setJimuMapView] = useState(null);
-    const [mapSettingsString, setMapSettingsString] = useState<any>({});
-    const [graphicsLayersGraphics, setGraphicsLayerGraphics] = useState<any>([]);
     const [currentInstanceName, setCurrentInstanceName] = useState("");
     const storageKey = "saveInstanceWidgetSessions";
     
     const [showFunctionLegend, setShowFunctionLegend] = useState(false);
-
-    const [fileContent, setFileContent] = useState('');
 
     // Esri color ramps - Blue 19
     // #00497cff,#0062a8ff,#007cd3ff,#00b7ffff
@@ -32,7 +22,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
 
     const [savedInstances, setSavedInstances] = useState([]);
-    let sessions;
 
 
 
@@ -296,24 +285,14 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
              * @param {Array} array of layer settings to apply to map
              */
             function setLayersOnMap(settings) {
-              console.log(settings)
-              var propName = "",
-                  layerSettings,
-                  layer,
-                  addGraphicsToLayer,
-                  visibleLayers = [],
-                  removeItem = [],
-                  i = 0;
+              var layerSettings,
+                  layer
 
               for(layerSettings in settings) {
-                  console.log(layerSettings)
                   layer = jimuMapView.view.map.findLayerById(settings[layerSettings].id);
-                  console.log(layer)
                   if (!layer) {
-                     // console.log('SaveInstance :: setLayersOnMap :: no layer found with id = ', propName);
-                      //layer = addLayerToMap(layerSettings);
-                      // exit here? or re-apply settings 
-                      return;
+                     console.log("unable to find layer", settings[layerSettings].id);
+                     continue;
                   }
 
                   // set visible
@@ -482,25 +461,26 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
         let decodedJSON = atob(uploadedString);
         const parsed = JSON.parse(decodedJSON);
         console.log("PARSED", parsed)
-        //loop through the parsed object
-        //check for duplicate instances
-        let nonDuplicateInstances = []; 
-        parsed.forEach(instance => {
-          console.log("INSTANCE", instance)
-          const duplicateInstances = savedInstances.filter(s => s.name === instance.name);
-          if(duplicateInstances.length > 0){
-            console.log("DUPLICATE INSTANCE", instance)
-            const response = window.confirm(`The instance "${instance.name}" already exists, do you want to replace it?`);
-            if(!response){
-              return;
-            }
-          }
-          nonDuplicateInstances.push(instance);
-        });
+        
+        const savedInstancesMap = new Map(savedInstances.map(inst => [inst.name, inst]));
 
-        const newSavedInstances = [...savedInstances, ...nonDuplicateInstances];  
-        setSavedInstances(newSavedInstances);
-        storeInstances(newSavedInstances);
+        parsed.forEach(newInstance => {
+          if (savedInstancesMap.has(newInstance.name)) {
+            const replace = window.confirm(`The instance "${newInstance.name}" already exists. Do you want to replace it?`);
+            if (replace) {
+              savedInstancesMap.set(newInstance.name, newInstance);
+            } else {
+              console.log(`User cancelled replacing "${newInstance.name}"`);
+            }
+          } else {
+            savedInstancesMap.set(newInstance.name, newInstance);
+          }
+        });
+        
+       
+        const updatedSavedInstances = Array.from(savedInstancesMap.values());
+        setSavedInstances(updatedSavedInstances);
+        storeInstances(updatedSavedInstances);
         
       } catch (err) {
         console.error("Invalid JSON input");
@@ -517,7 +497,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           if (typeof text === 'string') {
             console.log(text)
             validateUploadedString(text)
-            setFileContent(text);
           }
         };
         reader.readAsText(file);
