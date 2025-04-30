@@ -66,7 +66,7 @@ To share a saved instance, simply send the `.txt` file to another user. They can
 ## 🐛 Bugs & Feature Requests
 
 Have a bug to report or a feature idea?  
-Please [open an issue on this GitHub repo](#) or leave a comment in the [Esri Community](#).
+Please [open an issue on this GitHub repo](https://github.com/svenweb/saveInstanceWidget/issues) or leave a comment in the [Esri Community](https://community.esri.com/t5/arcgis-experience-builder-ideas/save-instance-widget/idi-p/1610260).
 
 I’m also happy to hear requests for:
 - Migrating existing Web AppBuilder widgets to Experience Builder
