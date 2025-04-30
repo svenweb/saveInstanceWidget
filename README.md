@@ -1,57 +1,75 @@
 # Save Instance Widget for Experience Builder
-Inspired by the Save Session Widget for WebAppBuilder, the Save Instance Widget allows ExB users to save and share the extent, layer settings, basemap, graphics and more from their web map instance.
 
-## Installation
-Visit the [JensenGIS](https://jensengis.com) website to download the latest compiled Save Instance Widget.
+The **Save Instance Widget** lets you save and share the current state of your web map in Experience Builder — including extent, visible layers, basemap, graphics, and more. It's inspired by the classic Save Session Widget from Web AppBuilder, but built specifically for ArcGIS Experience Builder.
 
-## Setup
-After downloading the compiled Save Instance Widget follow the [instructions](https://doc.arcgis.com/en/experience-builder/11.0/configure-widgets/add-custom-widgets.htm) from ESRI.
+---
 
-Once you have the widget registered and in your /widgets folder. You can find the widget in the custom widgets section at the bottom of the Insert Widget tab in Experience Builder.
+## 🛠 Installation
 
-Then drag the Save Instance widget to your widget toolbar, and then configure the settings of the widget by Selecting a map for the widget to interact with.
+You can download the latest compiled version of the Save Instance Widget from [JensenGIS](https://jensengis.com).
 
-That's it.
+---
 
-## Usage
+## ⚙️ Setup
 
-### Saving an Instance
-Input a name for the instance and click the **Save Instance** button
+Once downloaded, follow [Esri’s guide](https://doc.arcgis.com/en/experience-builder/11.0/configure-widgets/add-custom-widgets.htm) on how to add custom widgets to your Experience Builder installation.
+
+1. Place the widget inside your `/widgets` directory.
+2. In Experience Builder, go to the **Insert Widget** tab and scroll down to the **Custom Widgets** section.
+3. Drag the **Save Instance Widget** onto your toolbar.
+4. Configure the widget by selecting a map for it to interact with.
+
+That’s it — you’re ready to go.
+
+---
+
+## 🚀 Usage
+
+### 💾 Save an Instance
+Enter a name for the instance and click the **Save Instance** button.  
 ![Name and save an Instance](./images/instanceName.png)
 
-### Loading Instances
-After naming and saving an instance, click the **Load Instance** button to load the instance to the map.
-![load instance to map](./images/instanceLoad.png)
+### 🔄 Load an Instance
+Click the **Load Instance** button to apply a previously saved map state.  
+![Load instance to map](./images/instanceLoad.png)
 
-### Edit Instance Name
-Click the **Edit Instance Name** button and enter the new name for the instance in the prompt.
+### ✏️ Rename an Instance
+Click the **Edit Instance Name** button and enter a new name when prompted.  
 ![Edit instance name](./images/instanceRename.png)
 
-### Download Instance
-Click the **Download Instance** button and a .txt file will be downloaded with that specific instance.
-![load instance to map](./images/instanceDownload.png)
-Or download all instances by clicking the **Download Instances** button in the bottom left.
+### 📥 Download an Instance
+Click **Download Instance** to export a `.txt` file containing that instance.  
+![Download instance](./images/instanceDownload.png)
 
-### Clear Instance Graphics
-Click the **Clear Instance Graphics** button, if there are any graphics associated with that instance name on the map they will be removed from the jimuMapView.map.view.graphics object.
-![load instance to map](./images/instanceClearGraphics.png)
+You can also download **all** saved instances using the **Download Instances** button at the bottom right of the widget.
 
-### Delete Instance
-Click the **Delete Instance** button and the instance will be removed.
-![load instance to map](./images/instanceDelete.png)
+### 🧹 Clear Instance Graphics
+Click **Clear Instance Graphics** to remove any graphics associated with the instance from the map.  
+![Clear graphics](./images/instanceClearGraphics.png)
 
+>I'd love to get instance-loaded graphics working with the Esri Draw Widget at some point. It’ll take a bit of setup, but if it’s something people are asking for, I’m happy to start looking into it — just let me know!
 
+### 🗑️ Delete an Instance
+Click **Delete Instance** to permanently remove it from your saved list.  
+![Delete instance](./images/instanceDelete.png)
 
-## Sharing Instances
-Once you have downloaded an instance or instances, you can simply send the .txt file to whom you would to share the instances to. They can use the **Upload Instances** button in the bottom left to upload the .txt file.
+---
 
-In the future I would like to implement cloud storage of instances, if there is enough support.
+## 🔗 Sharing Instances
 
+To share a saved instance, simply send the `.txt` file to another user. They can import it using the **Upload Instances** button in the bottom-left corner of the widget.
 
+> In the future, I’d love to add support for cloud storage of instances — let me know if that’s something you’d use!
 
+---
 
+## 🐛 Bugs & Feature Requests
 
-## Contributing
+Have a bug to report or a feature idea?  
+Please [open an issue on this GitHub repo](#) or leave a comment in the [Esri Community](#).
 
-#### Any requests for new features please submit an issue or an comment on the Esri Community
+I’m also happy to hear requests for:
+- Migrating existing Web AppBuilder widgets to Experience Builder
+- Building new custom widgets for open-source release or for private use.
 
+Stay tuned — more tools are coming soon!

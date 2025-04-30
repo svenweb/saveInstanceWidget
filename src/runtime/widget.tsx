@@ -7,31 +7,31 @@ import Graphic from "@arcgis/core/Graphic.js";
 import Basemap from "@arcgis/core/Basemap.js";
 
 
+/**
+ * @author Sven Jensen
+ * @version 1.0.1
+ * 
+ * The Save Instance widget developed by Sven Jensen, 2025.
+ */
+
 const Widget = (props: AllWidgetProps<IMConfig>) => {
 
     const [jimuMapView, setJimuMapView] = useState(null);
     const [currentInstanceName, setCurrentInstanceName] = useState("");
-    const storageKey = "saveInstanceWidgetSessions";
     
     const [showFunctionLegend, setShowFunctionLegend] = useState(false);
+    const [savedInstances, setSavedInstances] = useState([]);
 
-    // Esri color ramps - Blue 19
+      // Esri color ramps - Blue 19
     // #00497cff,#0062a8ff,#007cd3ff,#00b7ffff
     const blue19Colors = ["#00497cff", "#0062a8ff", "#007cd3ff", "#00b7ffff"];
-
-
-
-    const [savedInstances, setSavedInstances] = useState([]);
+    const storageKey = "saveInstanceWidgetInstances";
 
 
 
     useEffect(() => {
       loadSavedInstancesFromStorage();
     },[])
-
-    useEffect(() => {
-      console.log(savedInstances)
-    }, [savedInstances])
 
      /**
        * Description: Handles the change of the active view.
@@ -41,7 +41,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       const activeViewChangeHandler = (jmv: JimuMapView) => {
         if (jmv) {
           setJimuMapView(jmv);
-          console.log(jmv)
         }
       }; 
 
@@ -50,13 +49,12 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       //Get the name,webmapId,extent,layers,graphics
       //getMapInstanceData()
       /**
-       * returns the session object for the current map
-       * @returns {Object} map settings for session
+       * returns the instance object for the current map
+       * @returns {Object} map settings for instance
        */
       const getSettingsForCurrentMap = async () => {
         if (!jimuMapView) return null;
 
-        console.log(jimuMapView)
 
         if(currentInstanceName === ""){
           alert("Please enter an instance name")
@@ -65,7 +63,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
         //check if there is an instance with the same name as currentInstanceName
         const duplicateInstance = savedInstances.filter(s => s.name === currentInstanceName);
-        console.log("DUPLICATE INSTANCE", duplicateInstance)
         if(duplicateInstance.length > 0){
           alert(`The instance "${currentInstanceName}" already exists, please choose another name`)
           return null
@@ -93,20 +90,21 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
         settings.graphics = getGraphicsForCurrentMap(graphicsLayersGraphics);
 
-        console.log(settings)
-        let settingsJSON = JSON.stringify(settings);
-        let settingsBase64 = btoa(settingsJSON);
         
         const updatedSavedInstances = [...savedInstances, settings];
         setSavedInstances(updatedSavedInstances);
 
-        console.log("SETTINGS: ", settingsBase64)
 
         storeInstances(updatedSavedInstances);
         return settings;
       };
 
 
+      /**
+       * Collects all graphics from the current map view and the graphics layers.
+       * @param {Array} graphicsLayersGraphics Graphics from the graphics layers.
+       * @returns {Array} An array of graphics in JSON format.
+       */
       function getGraphicsForCurrentMap(graphicsLayersGraphics: any[]){
         const graphicsList = [];
 
@@ -130,7 +128,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
        * @returns {Promise<Array>} A promise that resolves to an array of layer settings.
        */
       const getLayerSettingsForCurrentMap = async () => {
-        console.log("hi")
         if (!jimuMapView) return [];
 
         let graphicsLayersGraphics = [];
@@ -153,12 +150,16 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
           return [settings, graphicsLayersGraphics];
         } catch (err) {
-          console.error('SaveInstance :: getLayerSettingsForCurrentMap :: error getting layersObjects  = ', err);
+          console.error('SaveInstance error in getLayerSettingsForCurrentMap, error getting layersObjects  = ', err);
           return [];
         }
       };
 
-      //Different layer types have different settings that are needed to save.
+/**
+ * Retrieves settings for a specified layer.
+ * @param {Object} layer - The layer object for which settings are to be retrieved.
+ * @returns {Array} An array containing the layer settings object, a boolean indicating if the layer is a graphics layer, and an array of graphics in JSON format if applicable.
+ */
       const getSettingsForLayer = (layer) => {
 
         let layerGraphicsJSON;
@@ -188,18 +189,23 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
             layerSettings.options = getOptionsForGroupLayer(layer)
             break;
           case "GraphicsLayer":
-            console.log("GRAPHICS LAYER", layer)
             isGraphicsLayer = true
             layerGraphicsJSON = getGraphicsFromGraphicsLayer(layer)
             break;
           default:
-            //console.log('SaveIntance :: getSettingsForLayer :: no options for layer type = ', layerSettings.type);
             break;
         }
 
         return [layerSettings, isGraphicsLayer, layerGraphicsJSON ]
       };
 
+      
+
+      /**
+       * Determines the type of the layer.
+       * @param {Object} layer - the layer whose type is to be determined
+       * @returns {string} the type of the layer
+       */
       const getLayerType = (layer) => {
         if (layer.type === 'feature') return 'FeatureLayer';
         if (layer.type === 'tile') return 'TileLayer';
@@ -209,9 +215,15 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
         return 'UnknownLayerType';
       };
 
+      
+      /**
+       * Extracts all graphics from the given GraphicsLayer, and adds the current
+       * instance name to the graphics' attributes.
+       * @param {Object} layer - the GraphicsLayer from which to extract the graphics
+       * @returns {Array} an array of graphics in JSON format
+       */
       const getGraphicsFromGraphicsLayer = (layer) => {
         let layerGraphicsList = [];
-        console.log(layer)
         const graphics = layer.graphics.toArray();
         graphics.forEach(graphic => {
           graphic.attributes = {
@@ -223,6 +235,11 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
         return layerGraphicsList
       }
 
+      /**
+       * Returns the options for the given dynamic layer.
+       * @param {Object} layer - the dynamic layer for which to generate the options
+       * @returns {Object} the options for the dynamic layer
+       */
       const getOptionsForDynamicLayer = (layer) => {
         const options = {
           id: layer.id,
@@ -232,10 +249,14 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           visible: layer.visible
         };
 
-      //  console.log('SaveInstance :: getOptionsForDynamicLayer :: options =  ', options, ' for layer = ', layer.id);
         return options;
       };
 
+      /**
+       * Returns the options for the given feature layer.
+       * @param {Object} layer - the feature layer for which to generate the options
+       * @returns {Object} the options for the feature layer
+       */
       const getOptionsForFeatureLayer = (layer) => {
         const options = {
           id: layer.id,
@@ -246,9 +267,14 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           visible: layer.visible
         };
 
-       // console.log('SaveInstance :: getOptionsForFeatureLayer :: options =  ', options, ' for layer = ', layer.id);
         return options;
       };
+
+      /**
+       * Returns the options for the given tiled layer.
+       * @param {Object} layer - the tiled layer for which to generate the options
+       * @returns {Object} the options for the tiled layer
+       */
 
       const getOptionsForTiledLayer = (layer) => {
         const options = {
@@ -258,12 +284,20 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           visible: layer.visible
         };
 
-        //console.log('SaveInstance :: getOptionsForTiledLayer :: options =  ', options, ' for layer = ', layer.id);
         return options;
       };
 
+      
+      /**
+       * Returns the options for the given group layer.
+       * @param {Object} layer - the group layer for which to generate the options
+       * @returns {Object} the options for the group layer
+       *
+       * The options for the group layer are gathered from the layer's properties
+       * and from the settings of the layers in it, which are gathered by calling
+       * getSettingsForLayer() on each of them.
+       */
       const getOptionsForGroupLayer = (layer) => {
-        //console.log(layer)
         const subLayerSettings = layer.allLayers.items.map(subLayer => getSettingsForLayer(subLayer));
         const options = {
           id: layer.id,
@@ -273,7 +307,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           subLayers: subLayerSettings
         };
       
-        //console.log('SaveInstance :: getOptionsForGroupLayer :: options =  ', options, ' for layer = ', layer.id);
         return options;
       };
 
@@ -294,9 +327,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
                      console.log("unable to find layer", settings[layerSettings].id);
                      continue;
                   }
-
-                  // set visible
-                  //if (layer.isVisibile) {
+           
                   layer.visible = settings[layerSettings].isVisible;
 
                   }
@@ -305,7 +336,14 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
               }
 
 
-              //Need to check that graphics have not already been added to the maps
+            /**
+             * Apply graphics to the map.
+             * @param {Array} graphics - An array of graphics in JSON format.
+             * @param {string} instanceName - The name of the instance to which the graphics belong.
+             * 
+             * This function first removes any existing graphics with the same instance name.
+             * Then it adds all the graphics in the graphics array.
+             */
               function setGraphicsOnMap(graphics, instanceName){
                 //find any graphics with the same instance name
                 let existingGraphics = jimuMapView.view.graphics.filter(function(graphic){
@@ -328,11 +366,10 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
 
               /**
-             * Apply the settings from the given session to the current map
-             * @param {Object} sessionToLoad a session
+             * Apply the settings from the given instance to the current map
+             * @param {Object} sessionToLoad a instance
              */
-            function loadSession(sessionToLoad) {
-              console.log("LOADING THIS SESSION: ",sessionToLoad)
+            function loadInstance(instanceToLoad) {
               // if (sessionToLoad.webmapId && sessionToLoad.webmapId !== jimuMapView.view.map.itemId) {
               //   alert("this is not the map you are looking for");
               //   return
@@ -341,32 +378,37 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
               let extentToLoad;
 
               //set basemap
-              if (sessionToLoad.basemap) {
-                let newBaseMap = Basemap.fromJSON(sessionToLoad.basemap);
+              if (instanceToLoad.basemap) {
+                let newBaseMap = Basemap.fromJSON(instanceToLoad.basemap);
                 jimuMapView.view.map.basemap = newBaseMap;
               }
 
               //  zoom the map
-              if (sessionToLoad.extent) {
-                  console.log(sessionToLoad.extent)
-                  extentToLoad = Extent.fromJSON(sessionToLoad.extent);
+              if (instanceToLoad.extent) {
+                  extentToLoad = Extent.fromJSON(instanceToLoad.extent);
                   jimuMapView.view.goTo(extentToLoad);
               }
 
               // load the saved graphics
               //use Collection.find() method to try to find out if the graphic is already on the map
 
-             setGraphicsOnMap(sessionToLoad.graphics, sessionToLoad.name);
-             console.log(jimuMapView.view.graphics)
+             setGraphicsOnMap(instanceToLoad.graphics, instanceToLoad.name);
 
 
               // toggle layers
-              if (sessionToLoad.layers) {
-                  setLayersOnMap(sessionToLoad.layers);
+              if (instanceToLoad.layers) {
+                  setLayersOnMap(instanceToLoad.layers);
               }
 
-              console.log('SaveSession :: loadSession :: session  = ', sessionToLoad);
           }
+
+/**
+ * Checks if the given type of web storage is available and functional.
+ * Attempts to set and remove an item to verify storage capabilities.
+ *
+ * @param {string} type - The type of storage to check, e.g., "localStorage" or "sessionStorage".
+ * @returns {boolean} - True if storage is available and can be used, false otherwise.
+ */
 
           function storageAvailable(type) {
             let storage;
@@ -388,9 +430,16 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           }
 
 
-      /**
-       * read the saved instances from storage
-      */
+   
+/**
+ * Loads saved instances from local storage.
+ * If local storage is available, retrieves, decodes, and parses the saved instances JSON string.
+ * Updates the current instances with the retrieved saved instances.
+ * Logs a message if no saved instances are found.
+ * 
+ * Requires the 'storageAvailable' function to check local storage availability
+ * and the 'setSavedInstances' function to update the current instances.
+ */
       function loadSavedInstancesFromStorage() {
         if (storageAvailable("localStorage")) {
           // Yippee! We can use localStorage awesomeness
@@ -405,9 +454,8 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
           const decodedStoredInstances = atob(storedString);
           storedInstances = JSON.parse(decodedStoredInstances);
-          console.log("Loaded saved instances: ", storedInstances);
 
-          // replace to current sessions
+          // replace to current instances
           setSavedInstances(storedInstances);
         } else {
           // Too bad, no localStorage for us
@@ -415,7 +463,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       }
 
       /**
-         * save the current sessions to local storage
+         * save the current instances to local storage
       */
       function storeInstances(savedInstances) {
         if (storageAvailable("localStorage")) {
@@ -424,12 +472,15 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           const savedInstancesEncoded = btoa(savedInstancesJSON);
           localStorage.setItem(storageKey, savedInstancesEncoded);
 
-          console.log("FORMAT BEING STORED:", savedInstancesJSON);
         } else {
           // Too bad, no localStorage for us
         }
     }
 
+  /**
+   * Edit the name of an instance
+   * @param {string} instanceName - the name of the instance to be edited
+   */
     function editInstanceName(instanceName){
       //open a prompt window asking what they want to change {instanceName} to, and also have a cancel button
       const newName = window.prompt("Enter a new name for the instance " + instanceName + ":");
@@ -455,12 +506,19 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       }
     }
 
+    
+  /**
+   * Validate the uploaded file. If the uploaded file is valid JSON, it will
+   * be parsed and each instance will be added to the saved instances list.
+   * If an instance with the same name already exists, the user will be
+   * prompted to replace it.
+   * @param {string} uploadedString The uploaded file as a string.
+   */
     function validateUploadedString(uploadedString:string){
       //validate the uploaded file
       try {
         let decodedJSON = atob(uploadedString);
         const parsed = JSON.parse(decodedJSON);
-        console.log("PARSED", parsed)
         
         const savedInstancesMap = new Map(savedInstances.map(inst => [inst.name, inst]));
 
@@ -488,6 +546,14 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
     }
       
 
+/**
+ * Handles the file input change event. If a valid text file is uploaded,
+ * it reads the file content and validates it. If the file is not a valid
+ * text file, an alert is shown to the user.
+ * 
+ * @param {Event} event - The file input change event.
+ */
+
     const handleFileChange = (event) => {
       const file = event.target.files?.[0];
       if (file && file.type === "text/plain") {
@@ -495,7 +561,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
         reader.onload = (e) => {
           const text = e.target?.result;
           if (typeof text === 'string') {
-            console.log(text)
             validateUploadedString(text)
           }
         };
@@ -563,6 +628,12 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
  * @param {string} instanceName - The name of the instance to be removed.
  */
     function removeInstance(instanceName){
+      //prompt user if they are sure they want to remove the instance
+      const shouldRemove = window.confirm(`Are you sure you want to remove the instance "${instanceName}"?`);
+      if (!shouldRemove) {
+        return
+      }
+
       removeInstanceGraphicsFromMap(instanceName)
       const updatedSavedInstances = savedInstances.filter(instance => instance.name !== instanceName);
       setSavedInstances(updatedSavedInstances)
@@ -572,19 +643,28 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
     
 
 
+    /**
+     * Render the list of saved instances as a table.
+     * Each instance is rendered as a table row with buttons to:
+     * - load the instance to the map
+     * - edit the instance name
+     * - download the instance
+     * - clear the instance graphics from the map
+     * - delete the instance
+     *
+     * If there are no saved instances, nothing is rendered.
+     */
     function renderSavedInstances(){
-      console.log("RENDERING SAVED INSTANCES")
       if (savedInstances.length > 0) {
-        console.log("LENGTH GREATER THAN 1",savedInstances)
-        //for each instance, check if the webmapId matches the current map
-        //Then display a <tr> displaying the name of each instance
+
         return (
           <div style={{display: 'flex', flexDirection: 'column', width: '90%', marginRight:'4%'}}>
             <table style={{borderCollapse: 'collapse'}}>
               <tbody>
                 <tr>
                   <td style={{ textAlign: 'center', backgroundColor: blue19Colors[1], color: 'white',  fontSize: '13px' }}>Name</td>
-                  <td colSpan={5} style={{ textAlign: 'center', backgroundColor: blue19Colors[1], color: 'white', fontSize: '13px' }}>Functions <button style={{marginLeft:"3px",color:"white",backgroundColor: 'transparent', cursor: 'pointer', borderRadius: '50%', border: '1px solid white'}} onClick={() => setShowFunctionLegend(!showFunctionLegend)}>?</button></td>
+                  <td colSpan={5} style={{ textAlign: 'center', backgroundColor: blue19Colors[1], color: 'white', fontSize: '13px' }}>Functions <button style={{marginLeft:"3px",color:"white",backgroundColor: 'transparent', cursor: 'pointer', borderRadius: '50%', border: '1px solid white'}} 
+                  onClick={() => setShowFunctionLegend(!showFunctionLegend)}>?</button></td>
                 </tr>
                 {savedInstances.map((instance, index) => (
                   <tr key={index} style={{background: index % 2 === 0 ? '#f2f2f2' : 'white'}}>
@@ -599,9 +679,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
                           backgroundColor: 'transparent'
                         }}
                         onClick={() => {
-                          console.log(savedInstances)
-                          console.log(instance)
-                          loadSession(instance)}}
+                          loadInstance(instance)}}
                         title="Load instance to map"
                         
                       >
@@ -754,5 +832,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 }
 
 export default Widget
+
 
 
