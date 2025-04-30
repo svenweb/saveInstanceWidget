@@ -2,13 +2,13 @@
 
 The **Save Instance Widget** lets you save and share the current state of your web map in Experience Builder — including extent, visible layers, basemap, graphics, and more. It's inspired by the classic Save Session Widget from Web AppBuilder, but built specifically for ArcGIS Experience Builder.
 
----
+
 
 ## 🛠 Installation
 
 You can download the latest compiled version of the Save Instance Widget from [JensenGIS](https://jensengis.com).
 
----
+
 
 ## ⚙️ Setup
 
@@ -21,7 +21,7 @@ Once downloaded, follow [Esri’s guide](https://doc.arcgis.com/en/experience-bu
 
 That’s it — you’re ready to go.
 
----
+
 
 ## 🚀 Usage
 
@@ -53,7 +53,7 @@ Click **Clear Instance Graphics** to remove any graphics associated with the ins
 Click **Delete Instance** to permanently remove it from your saved list.  
 ![Delete instance](./images/instanceDelete.png)
 
----
+
 
 ## 🔗 Sharing Instances
 
@@ -61,7 +61,7 @@ To share a saved instance, simply send the `.txt` file to another user. They can
 
 > In the future, I’d love to add support for cloud storage of instances — let me know if that’s something you’d use!
 
----
+
 
 ## 🐛 Bugs & Feature Requests
 
