@@ -192,6 +192,9 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
             isGraphicsLayer = true
             layerGraphicsJSON = getGraphicsFromGraphicsLayer(layer)
             break;
+          case "UnknownLayerType":
+            layerSettings.options = getOptionsForUnknownLayer(layer);
+            break;
           default:
             break;
         }
@@ -233,6 +236,21 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           layerGraphicsList.push(graphic.toJSON());
         });
         return layerGraphicsList
+      } 
+
+      /**
+       * Returns the options for an unknown layer type.
+       * @param {Object} layer - the layer for which to generate the options
+       * @returns {Object} the options for the layer
+       */
+      function getOptionsForUnknownLayer(layer) {
+        const options = {
+          id: layer.id,
+          opacity: layer.opacity,
+          visible: layer.visible,
+          visibleTimeExtent: layer.visibleTimeExtent,
+        };
+        return options;
       }
 
       /**
