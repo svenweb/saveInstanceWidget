@@ -3,7 +3,7 @@
     "label": "Save Instance",
     "type": "widget",
     "version": "1.0.1",
-    "exbVersion": "1.16.0",
+    "exbVersion": "1.17.0",
     "author": "Sven Jensen",
     "description": "Allow user to save the extent of the map, layer(s) status, graphcis.. etc.",
     "copyright": "",

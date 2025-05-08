@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react';
 import Extent from 'esri/geometry/Extent';
 import Graphic from "@arcgis/core/Graphic.js";
 import Basemap from "@arcgis/core/Basemap.js";
+import { Loading } from 'jimu-ui'
+import * as reactiveUtils from "@arcgis/core/core/reactiveUtils.js";
+
 
 
 /**
@@ -21,6 +24,10 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
     
     const [showFunctionLegend, setShowFunctionLegend] = useState(false);
     const [savedInstances, setSavedInstances] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isSaving, setIsSaving] = useState(true);
+
+    const [currentlyLoadingIndex, setCurrentlyLoadingIndex] = useState(-1);
 
       // Esri color ramps - Blue 19
     // #00497cff,#0062a8ff,#007cd3ff,#00b7ffff
@@ -40,19 +47,39 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
        */
       const activeViewChangeHandler = (jmv: JimuMapView) => {
         if (jmv) {
+
+                  // Basic example of watching for changes on a boolean property
+        reactiveUtils.watch(
+          // getValue function
+          () => jmv.view.updating,
+          // callback
+          (updating) => {
+            if(updating){
+              setIsLoading(true)
+            }else{
+              setIsLoading(false)
+              setCurrentlyLoadingIndex(-1)
+            }
+          });
+
           setJimuMapView(jmv);
         }
       }; 
 
 
-      
       //Get the name,webmapId,extent,layers,graphics
       //getMapInstanceData()
       /**
        * returns the instance object for the current map
        * @returns {Object} map settings for instance
        */
-      const getSettingsForCurrentMap = async () => {
+      const getSettingsForCurrentMap = async () => {        
+        // if(isLoading){
+        //   const shouldSave = window.confirm("The map is currently updating. Are you sure you want to save the current instance?");
+        //   if(!shouldSave){
+        //     return null
+        //   }
+        // }
         if (!jimuMapView) return null;
 
 
@@ -119,8 +146,33 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
         return graphicsList
       }
+    
 
+      /**
+       * Retrieves a dictionary of all map layers, including sublayers for map-image layers.
+       * 
+       * @returns {Object} A dictionary where the keys are layer IDs and the values are the corresponding layers.
+       *                   For layers of type "map-image", both the layer and its sublayers
+       *                   are included in the dictionary.
+       */
+      function getListOfAllMapLayers(): Record<string, __esri.Layer> {
+        const layerObjects = jimuMapView.view.map.allLayers.toArray();
+        const layersDict: Record<string, __esri.Layer> = {};
 
+        layerObjects.forEach((layer) => {
+          // If the layer is of type "map-image", add it and its sublayers to the dictionary
+          if (layer.type === "map-image" && "allSublayers" in layer) {
+            layersDict[layer.id] = layer;
+            layer.allSublayers.toArray().forEach((sublayer) => {
+              layersDict[sublayer.id] = sublayer;
+            });
+          } else {
+            layersDict[layer.id] = layer;
+          }
+        });
+
+        return layersDict;
+      }
 
 
       /**
@@ -133,8 +185,9 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
         let graphicsLayersGraphics = [];
 
         try {
-          const layerObjects = jimuMapView.view.map.allLayers.toArray();
-          const settings = layerObjects.map((layer, idx) => {
+          const layerObjects = getListOfAllMapLayers();
+          const settings = Object.values(layerObjects).map((layer, idx) => {
+
             const layerSettings = getSettingsForLayer(layer);
             
             const layerSettingsObject = layerSettings[0];
@@ -144,7 +197,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
             if(isGraphicsLayer === true){ //If it is a graphics layer
               graphicsLayersGraphics.push(...layerGraphicsJSON); //add it's graphics to the list
             }
-            layerSettingsObject.order = layerObjects.length - idx;
+            layerSettingsObject.order = Number(layerObjects.length) - Number(idx);
             return layerSettingsObject;
           });
 
@@ -247,7 +300,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
         const options = {
           id: layer.id,
           opacity: layer.opacity,
-          visible: layer.visible,
           visibleTimeExtent: layer.visibleTimeExtent,
         };
         return options;
@@ -260,13 +312,10 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
        */
       const getOptionsForDynamicLayer = (layer) => {
         const options = {
-          id: layer.id,
-          imageParameters: layer.imageFormat ? { format: layer.imageFormat, dpi: layer.dpi } : null,
           opacity: layer.opacity,
           refreshInterval: layer.refreshInterval,
-          visible: layer.visible
         };
-
+      
         return options;
       };
 
@@ -277,12 +326,10 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
        */
       const getOptionsForFeatureLayer = (layer) => {
         const options = {
-          id: layer.id,
           mode: layer.mode || 'on-demand',
           outFields: ["*"],
           opacity: layer.opacity,
           refreshInterval: layer.refreshInterval,
-          visible: layer.visible
         };
 
         return options;
@@ -296,10 +343,8 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
       const getOptionsForTiledLayer = (layer) => {
         const options = {
-          id: layer.id,
           opacity: layer.opacity,
           refreshInterval: layer.refreshInterval,
-          visible: layer.visible
         };
 
         return options;
@@ -316,13 +361,9 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
        * getSettingsForLayer() on each of them.
        */
       const getOptionsForGroupLayer = (layer) => {
-        const subLayerSettings = layer.allLayers.items.map(subLayer => getSettingsForLayer(subLayer));
         const options = {
-          id: layer.id,
           opacity: layer.opacity,
           refreshInterval: layer.refreshInterval,
-          visible: layer.visible,
-          subLayers: subLayerSettings
         };
       
         return options;
@@ -338,19 +379,22 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
             function setLayersOnMap(settings) {
               var layerSettings,
                   layer
+              
+              const allCurrentLayers = getListOfAllMapLayers();
 
               for(layerSettings in settings) {
-                  layer = jimuMapView.view.map.findLayerById(settings[layerSettings].id);
+                  layer = allCurrentLayers[settings[layerSettings].id];
                   if (!layer) {
                      console.log("unable to find layer", settings[layerSettings].id);
                      continue;
                   }
            
                   layer.visible = settings[layerSettings].isVisible;
-
+                  for (let layerOption in settings[layerSettings].options) {
+                    layer.layerOption = settings[layerSettings].options[layerOption];
                   }
 
-
+                  }
               }
 
 
@@ -387,10 +431,22 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
              * Apply the settings from the given instance to the current map
              * @param {Object} sessionToLoad a instance
              */
-            function loadInstance(instanceToLoad) {
-              // if (sessionToLoad.webmapId && sessionToLoad.webmapId !== jimuMapView.view.map.itemId) {
-              //   alert("this is not the map you are looking for");
-              //   return
+            function loadInstance(instanceToLoad, index) {
+              setCurrentlyLoadingIndex(index)
+
+            //set the current loading instance index to the one that is currently loading
+
+
+              setIsSaving(true);
+              
+              // toggle layers
+              if (instanceToLoad.layers) {
+                setLayersOnMap(instanceToLoad.layers);
+            }
+
+              
+              setGraphicsOnMap(instanceToLoad.graphics, instanceToLoad.name);
+
                 
               // }
               let extentToLoad;
@@ -405,20 +461,9 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
               if (instanceToLoad.extent) {
                   extentToLoad = Extent.fromJSON(instanceToLoad.extent);
                   jimuMapView.view.goTo(extentToLoad);
-              }
-
-              // load the saved graphics
-              //use Collection.find() method to try to find out if the graphic is already on the map
-
-             setGraphicsOnMap(instanceToLoad.graphics, instanceToLoad.name);
-
-
-              // toggle layers
-              if (instanceToLoad.layers) {
-                  setLayersOnMap(instanceToLoad.layers);
-              }
-
+              }        
           }
+        
 
 /**
  * Checks if the given type of web storage is available and functional.
@@ -573,6 +618,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
  */
 
     const handleFileChange = (event) => {
+      setIsSaving(true);
       const file = event.target.files?.[0];
       if (file && file.type === "text/plain") {
         const reader = new FileReader();
@@ -687,21 +733,22 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
                 {savedInstances.map((instance, index) => (
                   <tr key={index} style={{background: index % 2 === 0 ? '#f2f2f2' : 'white'}}>
                     <td style={{padding: '0px', border: '1px solid #ddd', fontSize: '13px',  textAlign: 'center', color:blue19Colors[0]}}>{instance.name}</td>
-                    <td style={{padding: '0px', textAlign: 'center', border: '1px solid #ddd'}}>
+                    <td style={{padding: '0px', textAlign: 'center', border: '1px solid #ddd', position: 'relative'}}>
                       <button
-                        style={{
-                          color: 'black',
-                          border: 'none',
-                          cursor: 'pointer',
-                          display: 'inline-block',
-                          backgroundColor: 'transparent'
-                        }}
-                        onClick={() => {
-                          loadInstance(instance)}}
-                        title="Load instance to map"
-                        
+                      style={{
+                        color: 'black',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'inline-block',
+                        backgroundColor: 'transparent',
+                        position: 'relative',
+                        zIndex: 1
+                      }}
+                      onClick={() => {
+                        loadInstance(instance, index)}}
+                      title="Load instance to map"
                       >
-                        <calcite-icon icon="overwrite-features" scale="s"/>
+                      {index === currentlyLoadingIndex ? <Loading type="PRIMARY" height={15} width={15} style={{position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)'}} /> : <calcite-icon icon="overwrite-features" scale="s"/>}
                       </button>
                     </td>
                     <td style={{ border: '1px solid #ddd',textAlign: 'center'}}>
@@ -754,8 +801,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
                       title="Delete instance"
                       ><calcite-icon icon="trash" scale="s"/></button>
                     </td>
-
-
                   </tr>
                 ))}
               </tbody>
@@ -769,6 +814,23 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
   return (
     <div className="widget-demo jimu-widget m-2 overflow-auto" style={{overflowY: 'scroll', scrollbarWidth: 'none'}}>
+              {/* Loading Overlay */}
+      {/** isLoading && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(128, 128, 128, 0.7)', // Grey overlay
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+        }}>
+          <Loading />
+        </div>
+      )*/}
         {props.hasOwnProperty("useMapWidgetIds") &&
                     props.useMapWidgetIds &&
                     props.useMapWidgetIds.length == 1 && (
