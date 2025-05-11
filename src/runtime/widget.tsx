@@ -24,8 +24,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
     
     const [showFunctionLegend, setShowFunctionLegend] = useState(false);
     const [savedInstances, setSavedInstances] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isSaving, setIsSaving] = useState(true);
 
     const [currentlyLoadingIndex, setCurrentlyLoadingIndex] = useState(-1);
 
@@ -55,9 +53,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           // callback
           (updating) => {
             if(updating){
-              setIsLoading(true)
             }else{
-              setIsLoading(false)
               setCurrentlyLoadingIndex(-1)
             }
           });
@@ -156,22 +152,18 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
        *                   are included in the dictionary.
        */
       function getListOfAllMapLayers(): Record<string, __esri.Layer> {
-        const layerObjects = jimuMapView.view.map.allLayers.toArray();
+
         const layersDict: Record<string, __esri.Layer> = {};
 
-        layerObjects.forEach((layer) => {
-          // If the layer is of type "map-image", add it and its sublayers to the dictionary
-          if (layer.type === "map-image" && "allSublayers" in layer) {
-            layersDict[layer.id] = layer;
-            layer.allSublayers.toArray().forEach((sublayer) => {
-              layersDict[sublayer.id] = sublayer;
-            });
-          } else {
-            layersDict[layer.id] = layer;
+        jimuMapView.view.map.layers.flatten(function(item){
+          if(item?.type === "map-notes"){
+            layersDict[item.id] = item
+            return
           }
+          layersDict[item.id] = item
+          return item.allSublayers  || item.sublayers || item.layers;
         });
-
-        return layersDict;
+        return layersDict
       }
 
 
@@ -315,7 +307,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           opacity: layer.opacity,
           refreshInterval: layer.refreshInterval,
         };
-      
         return options;
       };
 
@@ -437,7 +428,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
             //set the current loading instance index to the one that is currently loading
 
 
-              setIsSaving(true);
               
               // toggle layers
               if (instanceToLoad.layers) {
@@ -618,7 +608,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
  */
 
     const handleFileChange = (event) => {
-      setIsSaving(true);
       const file = event.target.files?.[0];
       if (file && file.type === "text/plain") {
         const reader = new FileReader();
@@ -912,6 +901,5 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 }
 
 export default Widget
-
 
 
