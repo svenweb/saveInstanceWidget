@@ -7,8 +7,8 @@ import Graphic from "@arcgis/core/Graphic.js";
 import Basemap from "@arcgis/core/Basemap.js";
 import { Loading } from 'jimu-ui'
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils.js";
-
-
+import Collection from "@arcgis/core/core/Collection.js";
+import Layer from "@arcgis/core/layers/Layer.js";
 
 /**
  * @author Sven Jensen
@@ -27,10 +27,12 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
 
     const [currentlyLoadingIndex, setCurrentlyLoadingIndex] = useState(-1);
 
+
       // Esri color ramps - Blue 19
     // #00497cff,#0062a8ff,#007cd3ff,#00b7ffff
     const blue19Colors = ["#00497cff", "#0062a8ff", "#007cd3ff", "#00b7ffff"];
     const storageKey = "saveInstanceWidgetInstances";
+    const jimuDrawGroupLayerIdIdentifier = "jimu-draw";
 
 
 
@@ -101,17 +103,17 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
           basemap: jimuMapView.view.map.basemap.toJSON()
         };
 
-        let graphicsLayersGraphics;
+        //let settingsGraphics;
 
         try {
           const layerSettings = await getLayerSettingsForCurrentMap();
-          settings.layers = layerSettings[0];
-          graphicsLayersGraphics = layerSettings[1];
+          settings.layers = layerSettings;
+          // settingsGraphics = layerSettings[1];
         } catch (err) {
           console.error("An error occurred while getting the layers from the current map.", err);
         }
 
-        settings.graphics = getGraphicsForCurrentMap(graphicsLayersGraphics);
+        settings.graphics = getGraphicsForCurrentMap();
 
         
         const updatedSavedInstances = [...savedInstances, settings];
@@ -128,10 +130,8 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
        * @param {Array} graphicsLayersGraphics Graphics from the graphics layers.
        * @returns {Array} An array of graphics in JSON format.
        */
-      function getGraphicsForCurrentMap(graphicsLayersGraphics: any[]){
-        const graphicsList = [];
-
-        graphicsList.push(...graphicsLayersGraphics);
+      function getGraphicsForCurrentMap(){
+        const graphicsList = []
         
         //Collect graphics from view.graphics
         const viewGraphics = jimuMapView.view.graphics;
@@ -144,29 +144,96 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       }
     
 
-      /**
-       * Retrieves a dictionary of all map layers, including sublayers for map-image layers.
-       * 
-       * @returns {Object} A dictionary where the keys are layer IDs and the values are the corresponding layers.
-       *                   For layers of type "map-image", both the layer and its sublayers
-       *                   are included in the dictionary.
-       */
-      function getListOfAllMapLayers(): Record<string, __esri.Layer> {
+/**
+ * Represents a layer or sublayer node in the hierarchy tree.
+ */
+interface LayerHierarchyNode {
+  layerSettings: {};
+  subLayers: LayerHierarchyNode[]; // subLayers is an array of nodes
+  subLayersType: string;
+}
 
-        const layersDict: Record<string, __esri.Layer> = {};
+/**
+* Recursively builds a hierarchical array structure of layers and sublayers.
+*
+* @param {Collection<Layer>} layersToProcess - The collection of layers to process at the current level.
+* @returns {LayerHierarchyNode[]} An array representing the hierarchical structure
+* of the layers provided in layersToProcess.
+*/
+function buildLayerHierarchyRecursive(layersToProcess: Collection): LayerHierarchyNode[] {
+  const hierarchy: LayerHierarchyNode[] = [];
 
-        jimuMapView.view.map.layers.flatten(function(item){
-          if(item?.type === "map-notes"){
-            layersDict[item.id] = item
-            return
+  // Base case: If there are no layers in the current collection, return an empty array.
+  if (!layersToProcess || layersToProcess.length === 0) {
+      return hierarchy;
+  }
+
+
+   let graphicsLayersGraphics = [];
+
+  // Iterate through the layers at the current level.
+  layersToProcess.forEach((item) => {
+      let subLayersType = 'null';
+      let immediateSublayers = new Collection<Layer>();
+
+      // Determine immediate sublayers for the current item.
+      // This logic works for various layer types including MapImageLayer, GroupLayer, etc.
+      // Use .toArray() because allSublayers/sublayers/layers return Collections.
+      // We add them to a new Collection to pass to the recursive call.
+      if (item.type !== "map-notes") {
+          if (item.allSublayers && item.allSublayers.length > 0) {
+              immediateSublayers.addMany(item.allSublayers);
+              subLayersType = 'allSublayers'
+          } else if (item.sublayers && item.sublayers.length > 0) {
+              immediateSublayers.addMany(item.sublayers);
+              subLayersType = 'sublayers'
+          } else if (item.layers && item.layers.length > 0) { // Specifically for GroupLayer type
+              immediateSublayers.addMany(item.layers);
+              subLayersType = 'layers'
+          } else if(item.subLayers && item.subLayers.length > 0){
+              immediateSublayers.addMany(item.subLayers);
+              subLayersType = 'subLayers'
           }
-          layersDict[item.id] = item
-          return item.allSublayers  || item.sublayers || item.layers;
-        });
-        return layersDict
       }
 
+      // --- Recursive Step ---
+      // Recursively call the function to build the hierarchy for the immediate sublayers.
+      const nestedSublayerHierarchy = buildLayerHierarchyRecursive(immediateSublayers);
 
+      const layerSettings = getSettingsForLayer(item);
+
+      
+      // Create the node structure for the current item.
+      // The 'subLayers' property holds the array structure returned by the recursive call.
+      const currentNode: LayerHierarchyNode = {
+          'layerSettings': layerSettings,
+          'subLayers': nestedSublayerHierarchy, // This is the array of child nodes
+          'subLayersType': subLayersType
+      };
+
+      // Add the current node to the hierarchy array for this level.
+      hierarchy.push(currentNode);
+  });
+
+  // Return the array structure built for this level of the hierarchy.
+  return hierarchy;
+}
+
+/**
+* Initiates the building of the layer hierarchy tree starting from the map's top-level layers.
+*
+* @returns {LayerHierarchyNode[]} The complete hierarchical array structure of map layers.
+*/
+function getLayerHierarchyTree(): LayerHierarchyNode[] { //LayerHierarchyNode[] {
+  // Get the top-level layers from the map.
+  const topLevelLayers = jimuMapView.view.map.layers;
+
+  // Start the recursive process with the top-level layers.
+  const hierarchy = buildLayerHierarchyRecursive(topLevelLayers);
+
+
+  return hierarchy;
+}
       /**
        * Retrieves the settings for all layers in the current map view.
        * @returns {Promise<Array>} A promise that resolves to an array of layer settings.
@@ -174,26 +241,27 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       const getLayerSettingsForCurrentMap = async () => {
         if (!jimuMapView) return [];
 
-        let graphicsLayersGraphics = [];
+        //let graphicsLayersGraphics = [];
 
         try {
-          const layerObjects = getListOfAllMapLayers();
-          const settings = Object.values(layerObjects).map((layer, idx) => {
+          const settings = getLayerHierarchyTree();
+          // const settings = Object.values(layerObjects).map((layer, idx) => {
 
-            const layerSettings = getSettingsForLayer(layer);
+          //   const layerSettings = getSettingsForLayer(layer);
             
-            const layerSettingsObject = layerSettings[0];
-            const isGraphicsLayer = layerSettings[1] as Boolean;
-            const layerGraphicsJSON = layerSettings[2];
+          //   const layerSettingsObject = layerSettings[0];
+          //   const isGraphicsLayer = layerSettings[1] as Boolean;
+          //   const layerGraphicsJSON = layerSettings[2];
             
-            if(isGraphicsLayer === true){ //If it is a graphics layer
-              graphicsLayersGraphics.push(...layerGraphicsJSON); //add it's graphics to the list
-            }
-            layerSettingsObject.order = Number(layerObjects.length) - Number(idx);
-            return layerSettingsObject;
-          });
+          //   if(isGraphicsLayer === true){ //If it is a graphics layer
+          //     graphicsLayersGraphics.push(...layerGraphicsJSON); //add it's graphics to the list
+          //   }
+          //   return layerSettingsObject;
+          // });
 
-          return [settings, graphicsLayersGraphics];
+          //return [settings, graphicsLayersGraphics];
+
+          return settings
         } catch (err) {
           console.error('SaveInstance error in getLayerSettingsForCurrentMap, error getting layersObjects  = ', err);
           return [];
@@ -208,16 +276,15 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       const getSettingsForLayer = (layer) => {
 
         let layerGraphicsJSON;
-        let isGraphicsLayer = false;
+        //let isGraphicsLayer = false;
 
         const layerSettings = {
           id: layer.id,
           name: layer.title,
           type: getLayerType(layer),
           isVisible: layer.visible,
-          visibleLayers: layer.visibleLayers || null,
-          url: layer.url,
-          options: null
+          options: null,
+          graphics: null
         };
 
         switch (layerSettings.type) {
@@ -234,8 +301,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
             layerSettings.options = getOptionsForGroupLayer(layer)
             break;
           case "GraphicsLayer":
-            isGraphicsLayer = true
-            layerGraphicsJSON = getGraphicsFromGraphicsLayer(layer)
+            layerSettings.graphics = getGraphicsFromGraphicsLayer(layer)
             break;
           case "UnknownLayerType":
             layerSettings.options = getOptionsForUnknownLayer(layer);
@@ -244,7 +310,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
             break;
         }
 
-        return [layerSettings, isGraphicsLayer, layerGraphicsJSON ]
+        return layerSettings
       };
 
       
@@ -290,7 +356,6 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
        */
       function getOptionsForUnknownLayer(layer) {
         const options = {
-          id: layer.id,
           opacity: layer.opacity,
           visibleTimeExtent: layer.visibleTimeExtent,
         };
@@ -361,32 +426,171 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
       };
 
 
-      
 
-            /**
-             * apply settings to layers
-             * @param {Array} array of layer settings to apply to map
-             */
-            function setLayersOnMap(settings) {
-              var layerSettings,
-                  layer
-              
-              const allCurrentLayers = getListOfAllMapLayers();
 
-              for(layerSettings in settings) {
-                  layer = allCurrentLayers[settings[layerSettings].id];
-                  if (!layer) {
-                     console.log("unable to find layer", settings[layerSettings].id);
-                     continue;
-                  }
-           
-                  layer.visible = settings[layerSettings].isVisible;
-                  for (let layerOption in settings[layerSettings].options) {
-                    layer.layerOption = settings[layerSettings].options[layerOption];
-                  }
 
+    // Define interfaces for clarity based on your settings structure
+    interface SingleLayerSettings {
+      id: string | number; // Use number for sublayers of MapImageLayer if applicable
+      name: string;
+      type: string; // Or a more specific type/enum if known
+      isVisible: boolean;
+      options: Record<string, any>; // Dictionary of other options like opacity
+      graphics: any[];
+    }
+
+    interface LayerSettingsNode {
+      layerSettings: SingleLayerSettings;
+      subLayers: LayerSettingsNode[]; // Nested array of sub-settings nodes
+      subLayersType: "allSublayers" | "sublayers" | "subLayers" | "layers" | "null"; // How to access live sublayers
+    }
+
+
+    /**
+    * Recursively applies settings from a settings structure to the corresponding layers on the map.
+    *
+    * @param {LayerSettingsNode[]} settingsNodes - Array of settings nodes for the current level of recursion.
+    * @param {Collection<Layer>} liveLayersCollection - The collection of live layers from the map that corresponds
+    * to the settingsNodes array at this level.
+    */
+    function applyLayerSettingsRecursive(settingsNodes: LayerSettingsNode[], liveLayersCollection: Collection, instanceName:string): void {
+      // Base case: If there are no settings nodes to process or no live layers to apply settings to, stop recursion.
+      if (!settingsNodes || settingsNodes.length === 0 || !liveLayersCollection) {
+          return;
+      }
+
+      // Loop through each layer/sublayer's settings node at the current level
+      settingsNodes.forEach((settingNode) => {
+          const setting = settingNode.layerSettings;
+          const settingsSubLayers = settingNode.subLayers;
+          const subLayersType = settingNode.subLayersType;
+
+
+                // If the layer from the settings is not found on the map (e.g., it was removed), skip it.
+            
+          if(setting.id.toString().includes(jimuDrawGroupLayerIdIdentifier) && setting.type === "GroupLayer"){
+            //this is the jimu draw widget layer.
+            //add all the graphics to the map.
+            //grab the settingsSubLayers.subLayers
+            settingsSubLayers.forEach((subLayer) => {
+              if(subLayer.layerSettings.type === "GraphicsLayer"){
+                setGraphicsOnMap(subLayer.layerSettings.graphics, instanceName);
+              }
+            })
+        }
+
+          // --- Find the corresponding live layer on the map ---
+          // Use the ID from the settings to find the actual layer object in the live collection.
+          const liveLayer = liveLayersCollection.find(layer => layer.id === setting.id);
+
+          if (!liveLayer) {
+              console.warn(`Layer with ID "${setting.id}" not found on the map. Settings cannot be applied for this layer.`);
+              return; // Move to the next setting node
+          }
+
+          // --- Apply settings to the found live layer ---
+
+          // Apply visibility
+          try {
+              liveLayer.visible = setting.isVisible;
+          } catch (error) {
+              console.warn(`Could not set visibility for layer "${liveLayer.id}":`, error);
+          }
+
+
+          // Apply other options (like opacity)
+          if (setting.options) {
+              for (const optionName in setting.options) {
+                  // Check if the layer object actually has this property before attempting to set it.
+                  // Some properties might only exist on specific layer types.
+                  // For simplicity, we'll attempt dynamic assignment, but be aware of potential errors.
+                  try {
+                      // Using 'as any' to bypass strict type checking for dynamic property assignment
+                      (liveLayer as any)[optionName] = setting.options[optionName];
+                  } catch (error) {
+                      console.warn(`Could not apply option "${optionName}" to layer "${liveLayer.id}":`, error);
                   }
               }
+          }
+
+          // --- Recurse for sublayers if they exist in the settings ---
+          if (settingsSubLayers && settingsSubLayers.length > 0) {
+              let liveSublayersCollection: Collection | undefined;
+
+              // Determine the correct property name on the live layer to access its immediate children,
+              // based on the 'subLayersType' saved in the settings.
+              // Need to cast the live layer to potentially different types as these properties
+              // might exist on specific Layer subclasses (MapImageLayer, GroupLayer).
+              switch (subLayersType) {
+                  case "allSublayers":
+                      // 'allSublayers' is typically on MapImageLayer
+                      liveSublayersCollection = liveLayer.allSublayers;
+                      break;
+                  case "sublayers":
+                      // 'sublayers' can be on MapImageLayer, ElevationLayer, etc.
+                      liveSublayersCollection = liveLayer.sublayers || liveLayer.sublayers; // Add GroupLayer as sometimes sublayers is there too
+                      break;
+                  case "layers":
+                    // 'layers' is typically on GroupLayer
+                    liveSublayersCollection = liveLayer.layers.items;
+                    break;
+                  case "subLayers":
+                      // 'layers' is typically on GroupLayer
+                      liveSublayersCollection = liveLayer.subLayers;
+                      break;
+
+                  default:
+                      // If subLayersType is 'null' or unexpected, there are no sublayers to process via property access
+                      console.warn(`Unknown or null subLayersType "${subLayersType}" for layer "${liveLayer.id}". Cannot recurse into live sublayers.`);
+                      liveSublayersCollection = undefined; // Ensure it's undefined
+                      break;
+              }
+
+
+              // If we successfully found the live collection of sublayers for the current layer,
+              // make the recursive call with the sub-settings and the live sub-collection.
+              if (liveSublayersCollection) {
+                  applyLayerSettingsRecursive(settingsSubLayers, liveSublayersCollection, instanceName);
+              } else {
+                  // This might happen if the layer type in the map doesn't match what was saved
+                  // or if the property didn't exist for some other reason.
+                  console.warn(`Could not find the live sublayer collection for layer "${liveLayer.id}" using type "${subLayersType}". Cannot apply settings to its children.`);
+              }
+          }
+      });
+    }
+
+
+    /**
+    * Entry point function to apply saved layer settings to the map.
+    *
+    * @param {LayerSettingsNode[]} settings - The hierarchical array structure of layer settings to apply.
+    */
+    function setLayersOnMap(settings: LayerSettingsNode[], instanceName:string): void {
+      if (!settings || settings.length === 0) {
+          console.log("No layer settings provided to apply.");
+          return;
+      }
+
+      // Start the recursive process with the top-level settings array
+      // and the map's top-level layers collection.
+      const topLevelLiveLayers = jimuMapView.view.map.layers;
+      applyLayerSettingsRecursive(settings, topLevelLiveLayers, instanceName);
+
+      console.log("Finished applying layer settings.");
+    }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
             /**
@@ -399,9 +603,14 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
              */
               function setGraphicsOnMap(graphics, instanceName){
                 //find any graphics with the same instance name
+                if(graphics.length === 0){
+                  console.warn("No graphics provided to apply.")
+                  return
+                }
                 let existingGraphics = jimuMapView.view.graphics.filter(function(graphic){
-                  return graphic.attributes.instance === instanceName 
+                  return graphic?.attributes?.instance === instanceName 
                 })
+
                 
                 //remove all graphics with same instance name
                 if(existingGraphics.length > 0){
@@ -431,7 +640,7 @@ const Widget = (props: AllWidgetProps<IMConfig>) => {
               
               // toggle layers
               if (instanceToLoad.layers) {
-                setLayersOnMap(instanceToLoad.layers);
+                setLayersOnMap(instanceToLoad.layers, instanceToLoad.name);
             }
 
               
